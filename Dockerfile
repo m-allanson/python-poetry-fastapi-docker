@@ -1,36 +1,43 @@
-# syntax=docker/dockerfile:1
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.12-slim as base
 
-RUN apt-get update && \
-    apt-get install --no-install-suggests --no-install-recommends --yes pipx
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_VERSION=1.8.3 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    PATH="$POETRY_HOME/bin:$PATH"
 
-ENV PATH="/root/.local/bin:${PATH}"
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Install Poetry - respects $POETRY_VERSION & $POETRY_HOME
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && curl -sSL https://install.python-poetry.org | python - \
+    && apt-get remove -y curl \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pipx install poetry
-RUN pipx inject poetry poetry-plugin-bundle
+# =================================
 
-WORKDIR /src
+FROM base as builder
+WORKDIR /app
 
-COPY pyproject.toml .
-COPY poetry.lock .
-COPY README.md .
+ENV POETRY_HOME="/opt/poetry" \
+    PATH="$POETRY_HOME/bin:$PATH"
 
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+COPY pyproject.toml poetry.lock ./
 
-# COPY /venv /venv
+RUN poetry install --no-dev
+RUN poetry env info
+
+# =================================
+
+FROM base as final
+WORKDIR /app
+
+# Copy installed packages from the builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
 COPY . .
-ENV PATH="/venv/bin:$PATH"
 
-CMD ["fastapi", "run", "/src/poetry_demo/main.py", "--port", "8000"]
-
-## Now copy in the dependencies and run the app
-# FROM python:3.12-slim-bookworm
-
-# COPY --from=builder /venv /venv
-# COPY . .
-# ENV PATH="/venv/bin:$PATH"
-
-# WORKDIR /src
-# CMD ["fastapi", "run", "/src/poetry_demo/main.py", "--port", "8000"]
+CMD ["fastapi", "run", "/app/poetry_demo/main.py", "--port", "8000"]
