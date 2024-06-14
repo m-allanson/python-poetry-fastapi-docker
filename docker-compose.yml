@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    # Allocates a pseudo-TTY, tricks the application into thinking it has an interactive terminal,
+    # thereby preserving color output.
+    tty: true
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app # Mounts the local 'app' directory to the '/app' directory in the container
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    command:
+      [
+        "fastapi",
+        "run",
+        "/app/poetry_demo/main.py",
+        "--port",
+        "8000",
+        "--reload",
+      ]
